@@ -1,52 +1,86 @@
-local wezterm = require 'wezterm'
-local act = wezterm.action
+ local wezterm = require("wezterm")
+ local config = wezterm.config_builder()
 
-return {
-  -- 見た目
-  color_scheme = "Catppuccin Mocha",
-  font = wezterm.font("JetBrains Mono"),
-  font_size = 13.0,
+--  1. デフォルトで起動するシェル
+ config.default_prog = { "pwsh.exe", "-NoLogo" }
 
-  -- カーソル
-  default_cursor_style = "BlinkingBlock",
+ -- 2. フォントと文字サイズ
+ config.font_size = 10.0
 
-  -- タブバー
-  enable_tab_bar = true,
-  hide_tab_bar_if_only_one_tab = true,
+ -- 3. カラースキーム
+ config.color_scheme = "Tokyo Night"
 
-  -- ウィンドウ透明度
-  window_background_opacity = 0.9,
+ -- 4. ウィンドウの外観・透過設定
+ config.window_background_opacity = 0.85
+ config.win32_system_backdrop = "Acrylic"
+ config.window_decorations = "RESIZE"
+ config.initial_cols = 120
+ config.initial_rows = 32
 
-  -- 起動シェル（PowerShell）
-  default_prog = { "pwsh.exe" },
+ -- 5. タブバー・描画設定
+ config.hide_tab_bar_if_only_one_tab = false
+ config.tab_bar_at_bottom = true
+ config.use_fancy_tab_bar = false
+ config.front_end = "WebGpu"
 
-  -- キーバインド
-  keys = {
-    -- 分割
-    { key = "Enter", mods = "ALT", action = act.SplitVertical { domain = "CurrentPaneDomain" } },
-    { key = "-", mods = "ALT", action = act.SplitHorizontal { domain = "CurrentPaneDomain" } },
+ -- 6. キーバインド
+ local act = wezterm.action
+ config.keys = {
+   { key = "D", mods = "CTRL|SHIFT", action = act.SplitHorizontal({ domain = "CurrentPaneDomain" }) },
+   { key = "E", mods = "CTRL|SHIFT", action = act.SplitVertical({ domain = "CurrentPaneDomain" }) },
+   { key = "W", mods = "CTRL|SHIFT", action = act.CloseCurrentPane({ confirm = true }) },
+   { key = "LeftArrow", mods = "ALT", action = act.ActivatePaneDirection("Left") },
+   { key = "RightArrow", mods = "ALT", action = act.ActivatePaneDirection("Right") },
+   { key = "UpArrow", mods = "ALT", action = act.ActivatePaneDirection("Up") },
+   { key = "DownArrow", mods = "ALT", action = act.ActivatePaneDirection("Down") },
+ }
 
-    -- タブ操作
-    { key = "t", mods = "ALT", action = act.SpawnTab "CurrentPaneDomain" },
-    { key = "d", mods = "ALT", action = act.CloseCurrentTab { confirm = false } },
+ -- 7. 左右ステータスバーの統合更新処理（ここに関数ラッパーを追加）
+ wezterm.on("update-status", function(window, pane)
+   -- === 1. 左端（ワークスペース・モード表示） ===
+   local workspace = window:active_workspace()
+   local key_table = window:active_key_table()
 
-    -- ペイン移動
-    { key = 'h', mods = 'ALT', action = wezterm.action.ActivatePaneDirection 'Left' },
-    { key = 'j', mods = 'ALT', action = wezterm.action.ActivatePaneDirection 'Down' },
-    { key = 'k', mods = 'ALT', action = wezterm.action.ActivatePaneDirection 'Up' },
-    { key = 'l', mods = 'ALT', action = wezterm.action.ActivatePaneDirection 'Right' },
+   local badge_text = "  " .. workspace .. " "
+   local badge_bg = "#7aa2f7"
+   local badge_fg = "#1a1b26"
 
-    -- タブ移動
-    { key = "1", mods = "ALT", action = act.ActivateTab(0) },
-    { key = "2", mods = "ALT", action = act.ActivateTab(1) },
-    { key = "3", mods = "ALT", action = act.ActivateTab(2) },
+   if window:leader_is_active() then
+     badge_text = "  LEADER "
+     badge_bg = "#e0af68"
+   elseif key_table == "copy_mode" then
+     badge_text = "  COPY "
+     badge_bg = "#9ece6a"
+   elseif key_table == "search_mode" then
+     badge_text = "  SEARCH "
+     badge_bg = "#bb9af7"
+   end
 
-    -- フォントサイズ
-    { key = "+", mods = "ALT|SHIFT", action = act.IncreaseFontSize },
-    { key = "-", mods = "ALT|SHIFT", action = act.DecreaseFontSize },
+   window:set_left_status(wezterm.format({
+     { Background = { Color = badge_bg } },
+     { Foreground = { Color = badge_fg } },
+     { Attribute = { Intensity = "Bold" } },
+     { Text = badge_text },
+   }))
 
-    -- コピペ
-    { key = "c", mods = "CTRL", action = act.CopyTo "Clipboard" },
-    { key = "v", mods = "CTRL", action = act.PasteFrom "Clipboard" },
-  },
-}
+   -- === 2. 右端（バッテリー・日時表示） ===
+   local bat = ""
+   for _, b in ipairs(wezterm.battery_info()) do
+     local charge = string.format("%.0f%%", b.state_of_charge * 100)
+     local state = (b.state == "Charging" and "⚡") or ""
+     bat = string.format(" %s%s ", state, charge)
+   end
+
+   local date = wezterm.strftime(" %m/%d (%a) %H:%M ")
+
+   window:set_right_status(wezterm.format({
+     { Foreground = { Color = "#7aa2f7" } },
+     { Text = bat },
+     { Foreground = { Color = "#565f89" } },
+     { Text = "|" },
+     { Foreground = { Color = "#c0caf5" } },
+     { Text = date },
+   }))
+ end)
+
+  return config
